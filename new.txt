@@ -1,0 +1,89 @@
+package config
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+)
+
+type Config struct {
+	Env         string     `json:"env"`
+	StoragePath string     `json:"storage_path"`
+	LogPath     string     `json:"log_path"`
+	Debug       bool       `json:"debug"`
+	GRPC        GRPCConfig `json:"grpc"`
+}
+
+type GRPCConfig struct {
+	Port int `json:"port"`
+}
+
+// MustLoad loads the configuration.
+func MustLoad() *Config {
+	configPath := FetchConfigPath()
+	if configPath == "" {
+		panic("config path is empty")
+	}
+
+	return MustLoadPath(configPath)
+}
+
+// MustLoadPath reads and parses the configuration from the given file path.
+func MustLoadPath(configPath string) *Config {
+	// Check if file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		panic(fmt.Sprintf("config file does not exist: %s", configPath))
+	}
+
+	file, err := os.Open(configPath)
+	if err != nil {
+		panic(fmt.Sprintf("failed to open config file: %s", err))
+	}
+	defer file.Close()
+
+	//
+	// Decode JSON configuration
+	//
+
+	var cfg Config
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&cfg); err != nil {
+		panic(fmt.Sprintf("cannot parse config file: %s", err))
+	}
+
+	//
+	// Validate required fields
+	//
+
+	if cfg.StoragePath == "" {
+		panic("storage_path is required")
+	}
+	if cfg.GRPC.Port == 0 {
+		panic("grpc.port is required")
+	}
+
+	return &cfg
+}
+
+// FetchConfigPath retrieves the configuration file path from the command-line flag or env
+func FetchConfigPath() string {
+	var res string
+
+	//
+	// Define a command-line flag for the config path
+	//
+
+	flag.StringVar(&res, "config", "", "Path to config file")
+	flag.Parse()
+
+	//
+	// Get variable from env
+	//
+
+	if res == "" {
+		res = os.Getenv("CONFIG_PATH")
+	}
+
+	return res
+}
